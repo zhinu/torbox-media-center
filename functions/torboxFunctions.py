@@ -1,4 +1,4 @@
-from library.http import api_http_client, search_api_http_client, general_http_client
+from library.http import api_http_client, search_api_http_client, general_http_client, requestWrapper
 import httpx
 from enum import Enum
 import PTN
@@ -150,7 +150,7 @@ def searchMetadata(query: str, title_data: dict, file_name: str, full_title: str
         return base_metadata, False, "Metadata scanning is disabled."
     extension = os.path.splitext(file_name)[-1]
     try:
-        response = search_api_http_client.get(f"/meta/search/{full_title}", params={"type": "file"})
+        response = requestWrapper(search_api_http_client, "GET", f"/meta/search/{full_title}", params={"type": "file"})
     except Exception as e:
         logging.error(f"Error searching metadata: {e}")
         return base_metadata, False, f"Error searching metadata: {e}. Searching for {query}, item hash: {hash}"
@@ -193,7 +193,7 @@ def searchMetadata(query: str, title_data: dict, file_name: str, full_title: str
         return base_metadata, False, f"Error searching metadata: {e}. Searching for {query}, item hash: {hash}"
 
 def getDownloadLink(url: str):
-    response = general_http_client.get(url)
+    response = requestWrapper(general_http_client, "GET", url)
     if response.status_code == httpx.codes.TEMPORARY_REDIRECT or response.status_code == httpx.codes.PERMANENT_REDIRECT or response.status_code == httpx.codes.FOUND:
         return response.headers.get('Location')
     return url
@@ -203,7 +203,7 @@ def downloadFile(url: str, size: int, offset: int = 0):
         "Range": f"bytes={offset}-{offset + size - 1}",
         **general_http_client.headers,
     }
-    response = general_http_client.get(url, headers=headers)
+    response = requestWrapper(general_http_client, "GET", url, headers=headers)
     if response.status_code == httpx.codes.OK:
         return response.content
     elif response.status_code == httpx.codes.PARTIAL_CONTENT:
