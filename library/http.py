@@ -2,10 +2,26 @@ import httpx
 from library.torbox import TORBOX_API_KEY
 import time
 import logging
+import hashlib
+import json
 
 TORBOX_API_URL = "https://api.torbox.app/v1/api"
 TORBOX_SEARCH_API_URL = "https://search-api.torbox.app"
 USER_AGENT = "TorBox-Media-Center/1.4 TorBox/1.0"
+CACHE_TTL = 300 # cache time-to-live in seconds
+_cache: dict[str, tuple[float, httpx.Response]] = {}
+
+def makeCacheKey(method: str, url: str, base_url: str, **kwargs) -> str:
+    key_data = {
+        "method": method,
+        "url": url,
+        "base_url": base_url,
+        "params": kwargs.get("params"),
+        "json": kwargs.get("json"),
+        "data": kwargs.get("data"),
+    }
+    key_str = json.dumps(key_data, sort_keys=True, default=str)
+    return hashlib.sha256(key_str.encode()).hexdigest()
 
 transport = httpx.HTTPTransport(
     retries=10
@@ -43,13 +59,33 @@ general_http_client = httpx.Client(
     transport=transport,
 )
 
-def requestWrapper(client: httpx.Client, method: str, url: str, **kwargs) -> httpx.Response:
+
+def requestWrapper(client: httpx.Client, method: str, url: str, use_cache: bool = True, **kwargs) -> httpx.Response:
     max_retries = 5
     backoff_factor = 1.5
+    
+    cacheable = use_cache and method.upper() == "GET" # only caching GET requests
+    cache_key = None
+    
+    if cacheable:
+        cache_key = makeCacheKey(method, url, str(client.base_url), **kwargs)
+        if cache_key in _cache:
+            cached_time, cached_response = _cache[cache_key]
+            if time.time() - cached_time < CACHE_TTL:
+                logging.debug(f"Cache hit for {url}")
+                return cached_response
+            else:
+                del _cache[cache_key]
+    
     for attempt in range(max_retries):
         try:
             response = client.request(method, url, **kwargs)
             response.raise_for_status()
+            
+            if cacheable and cache_key:
+                _cache[cache_key] = (time.time(), response)
+                logging.debug(f"Cached response for {url}")
+            
             return response
         except httpx.HTTPStatusError as e:
             bad_response_codes = [429]
