@@ -5,29 +5,44 @@ from library.app import RAW_MODE
 from library.filesystem import MOUNT_PATH
 from functions.appFunctions import getAllUserDownloads
 
-def generateFolderPath(data: dict):
+def generateFolderPath(data: dict) -> str | None:
     """
     Takes in a user download and returns the folder path for the download.
     """
+    
     if RAW_MODE:
         original_path = data.get("path")
         if original_path:
             return os.path.dirname(original_path)
         return None
     else:
-        root_folder = data.get("metadata_rootfoldername", None)
-        metadata_foldername = data.get("metadata_foldername", None)
-        if not root_folder and not metadata_foldername:
-            return None
-        if data.get("metadata_mediatype") == "series":
-            folder_path = os.path.join(root_folder, metadata_foldername)
-        elif data.get("metadata_mediatype") == "movie":
-            folder_path = os.path.join(root_folder)
-        elif data.get("metadata_mediatype") == "anime":
-            folder_path = os.path.join(root_folder, metadata_foldername)
-        else:
-            folder_path = os.path.join(root_folder)
-        return folder_path
+      root_folder: str | None = data.get("metadata_rootfoldername", None)
+      metadata_foldername: str | None = data.get("metadata_foldername", None)
+
+      if not root_folder:
+          return None
+
+      if data.get("metadata_mediatype") == "series":
+          if not metadata_foldername:
+              return None
+          folder_path = os.path.join(
+              root_folder,
+              metadata_foldername,
+          )
+      elif data.get("metadata_mediatype") == "movie":
+          folder_path = os.path.join(
+              root_folder
+          )
+
+      elif data.get("metadata_mediatype") == "anime":
+          if not metadata_foldername:
+              return None
+          folder_path = os.path.join(
+              root_folder,
+              metadata_foldername,
+          )
+          
+      return folder_path
 
 def generateStremFile(file_path: str, url: str, type: str, file_name: str, download=None):
     if RAW_MODE:
@@ -48,6 +63,12 @@ def generateStremFile(file_path: str, url: str, type: str, file_name: str, downl
             file.write(url)
         logging.debug(f"Created strm file: {full_path}/{file_name}.strm")
         return True
+    except FileNotFoundError as e:
+        logging.error(f"Error creating strm file (likely bad naming scheme of file): {e}")
+        return False
+    except OSError as e:
+        logging.error(f"Error creating strm file (likely bad or missing permissions): {e}")
+        return False
     except Exception as e:
         logging.error(f"Error creating strm file: {e}")
         return False

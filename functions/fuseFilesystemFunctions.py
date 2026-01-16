@@ -145,8 +145,8 @@ class TorBoxMediaCenterFuse(Fuse):
         self.cached_links = {}
 
         self.cache = {}
-        self.block_size = 1024 * 1024 * 16
-        self.max_blocks = 16
+        self.block_size = 1024 * 1024 * 64  # 64MB Blocks
+        self.max_blocks = 64 # Max 64 blocks in cache (4GB)
 
     def getFiles(self):
         while True:
@@ -173,6 +173,8 @@ class TorBoxMediaCenterFuse(Fuse):
             return st
         elif self.vfs.is_file(path):
             file_info = self.vfs.get_file(path)
+            if not file_info:
+                return -errno.ENOENT
             st.st_mode = stat.S_IFREG | 0o444
             st.st_nlink = 1
             st.st_size = file_info.get('file_size', 0)
@@ -201,6 +203,9 @@ class TorBoxMediaCenterFuse(Fuse):
         logging.debug(f"READ Size: {size}")
         logging.debug(f"READ Offset: {offset}")
         file = self.vfs.get_file(path)
+
+        if not file:
+            return -errno.ENOENT
         
         current_time = time.time()
         if path not in self.cached_links:
